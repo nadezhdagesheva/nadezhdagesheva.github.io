@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+
+
+
+<title>Benchmark models implementing CV and LOOCV</title>
+
+<script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+</style>
+
+
+<style type="text/css">
+/* padding for bootstrap navbar */
+body {
+  padding-top: 51px;
+  padding-bottom: 40px;
+}
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h1 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+
+.section h2 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h3 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h4 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h5 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h6 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+</style>
+
+<script>
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.parent().addClass('active');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+});
+</script>
+
+
+<div class="container-fluid main-container">
+
+<!-- tabsets -->
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+</script>
+
+<!-- code folding -->
+
+
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">Nadezhda Gesheva</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Data Science with R</a>
+</li>
+<li>
+  <a href="Project_1.html">CV &amp; LOOCV</a>
+</li>
+<li>
+  <a href="Project_2.html">PCA, Clustering &amp; Regularization</a>
+</li>
+<li>
+  <a href="Project_3.html">Ensemble Models</a>
+</li>
+<li>
+  <a href="Project_4.html">DL and stacking</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">Benchmark models implementing CV and LOOCV</h1>
+<h3 class="subtitle"><em>Linear model, logistic regression &amp; regression tree</em></h3>
+
+</div>
+
+
+<p><strong>Task 1:</strong></p>
+<p><strong>Predict developer salaries using the Stackoverflow Annual Developer Survey 2017. The dataset is downloaded from Kaggle.</strong></p>
+<div id="load-libraries-and-data-set" class="section level2">
+<h2>Load libraries and data set</h2>
+<pre class="r"><code>library(data.table)
+library(caret)
+library(ggplot2)
+
+data &lt;- fread(&quot;data\\survey_results_public_selected.csv&quot;)</code></pre>
+</div>
+<div id="data-cleaning" class="section level2">
+<h2>Data cleaning</h2>
+<p>Data cleaning is an essential part of the data analytics process. We need to be aware of missing values for some variables, we would like to differentiate between different countries and how often we have them in our dataset. We would aslo like clean the data from unintuitive values.</p>
+<pre class="r"><code>data &lt;- data[!is.na(Salary) &amp; Salary &gt; 0]
+data &lt;- data[complete.cases(data)]
+data &lt;- data[, Gender := ifelse(Gender == &quot;Male&quot;, &quot;Male&quot;,
+                                ifelse(Gender == &quot;Female&quot;, &quot;Female&quot;, &quot;Other&quot;))]
+# filter for large countries
+large_countries &lt;- data[, .N, by = &quot;Country&quot;][N &gt; 60][[&quot;Country&quot;]]
+data &lt;- data[, Country := ifelse(Country %in% large_countries, Country, &quot;Other&quot;)]</code></pre>
+</div>
+<div id="exploratory-data-analysis" class="section level2">
+<h2>Exploratory Data Analysis</h2>
+<pre class="r"><code>ggplot(aes(Salary), data = data) + geom_histogram() + 
+  ggtitle(&quot;Distribution of developer salaries&quot;) + theme_light()</code></pre>
+<pre><code>## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.</code></pre>
+<p><img src="Project_1_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<p>The distribution of the salaries is positively skewed with a long right tail. The peak is around 50 000$, however there are few extreme values in the higher ranges.</p>
+<pre class="r"><code>ggplot(data, aes(Gender, Salary)) + 
+  geom_boxplot(colour = &quot;darkgreen&quot;,  fill = &quot;white&quot;) + ggtitle(&quot;Boxplot per gender&quot;) +
+  theme_light()</code></pre>
+<p><img src="Project_1_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p>We see that in all countries, regardless of gender, developers on average get paid approximately the same salary. The median is similarly the same for males and females (around 50 000$), while the “other” category (which stands for missing data?) is slightly lower. Another observation that should be pointed out is that the upper whisker is more populated for males than for females. This suggests different salary range. Let’s investigate more.</p>
+<pre class="r"><code>ggplot(aes(Gender, Salary), data = data) + geom_point() + facet_wrap( ~ Country) + 
+  ggtitle(&quot;Distribution of Develper salaries with per country breakdown&quot;) + theme_light()</code></pre>
+<p><img src="Project_1_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+<p>We see that in all countries, the range of salaries that male developers earn is larger than the respective wage range for females.</p>
+</div>
+<div id="model-prediction" class="section level2">
+<h2>Model prediction</h2>
+<p>We will train two predictive models to predict the logarithm of Salary using the caret package.</p>
+<pre class="r"><code># create log_salary
+data &lt;- data[, log_salary := log(Salary)]
+
+# create training and test set
+training_ratio &lt;- 0.7
+set.seed(1234)
+train_indices &lt;- createDataPartition(y = data[[&quot;log_salary&quot;]],
+                                     times = 1,
+                                     p = training_ratio,
+                                     list = FALSE)
+train_set &lt;- data[train_indices, ]
+test_set &lt;- data[-train_indices, ]</code></pre>
+<pre class="r"><code># set the cross validation -10 folds
+set.seed(1234)
+train_control &lt;- trainControl(method = &quot;cv&quot;, number = 10)</code></pre>
+<p>Linear model</p>
+<pre class="r"><code># linear model with all variables as explanatory apart from Salary
+linear_fit &lt;- train(log_salary ~ . -Salary, method = &quot;lm&quot;, data = train_set, 
+                    trControl = train_control)
+# linear_fit performance
+# RMSE       Rsquared   MAE      
+# 0.9569742  0.4973999  0.5446188</code></pre>
+<p>Regression Tree</p>
+<pre class="r"><code># a regression tree
+tune_grid &lt;- data.frame(&quot;cp&quot; = c(0.01, 0.001, 0.0001, 0.00001, 0.000001))
+set.seed(1234)
+rpart_fit &lt;- train(log_salary ~ . -Salary, 
+                   data = train_set, 
+                   method = &quot;rpart&quot;, 
+                   trControl = train_control,
+                   tuneGrid = tune_grid)
+#rpart_fit
+# cp     RMSE       Rsquared   MAE      
+# 1e-06  1.0176615  0.4389875  0.5844119
+# 1e-05  1.0171127  0.4394886  0.5838310
+# 1e-04  1.0127748  0.4430201  0.5789464
+# 1e-03  0.9898655  0.4626986  0.5733854  # WINNER among regression trees with lowest RMSE.
+# 1e-02  1.0631265  0.3795067  0.6406908
+
+# The final value used for the model was cp = 0.001.</code></pre>
+<p><strong>It seems that with 10-fold cross validation, the lin regression has better performance on training dataset.</strong></p>
+<p>Check out the performance on test set of the better model - lin reg</p>
+<pre class="r"><code>linear_rmse_test &lt;- RMSE(predict.train(linear_fit, test_set), 
+                         test_set[[&quot;log_salary&quot;]])
+
+linear_rmse_test </code></pre>
+<pre><code>## [1] 0.9636814</code></pre>
+<p>The RMSE on test set of the linear model is 0.9636814, which is a bit higher than the RMSE of the training set.</p>
+</div>
+<div id="compare-the-true-and-predicted-values-of-the-test-set-on-a-graph" class="section level2">
+<h2>Compare the true and predicted values of the test set on a graph</h2>
+<pre class="r"><code>predicted &lt;- predict.train(linear_fit, test_set)
+
+ggplot(test_set, aes(test_set$log_salary, predicted)) + geom_point(color = &quot;darkgreen&quot;) + 
+  labs(x = &quot;actual&quot;, y = &quot;predicted&quot;) + theme_light() + ggtitle(&quot;Predicted vs actual Salary(in logs)&quot;)</code></pre>
+<p><img src="Project_1_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<p><em>The graph shows us a clear positive relationship between actual and redicted values of log_salary. If our model was perfect, then we would have observed a straight 45 degree line.</em></p>
+<p><strong>Task 2:</strong></p>
+<p><strong>Compare performance of LOOCV &amp; k-fold CV on the Titanic dataset to predict whether a person survived by employing logistic regression.</strong></p>
+<p>Some thoughts on the topic:</p>
+<p>A disadvantage when we use a k-fold cross validation is that we might create a model that works perfectly on a given dataset, but performs poorly on another one (i.e., “overfitting” issue). Nevertheless, since it is an exhaustive model training the data on all data points but one, it would show us various performances given all possible combinations of our observations, hence the “real” performance of the model. Also, the bias is smaller compared to when we employ k-fold cross validation.</p>
+<pre class="r"><code>library(titanic)
+data_train &lt;- data.table(titanic_train)
+# recode Survived to factor - needed for binary prediction
+data_train[, Survived := factor(ifelse(Survived == 1, &quot;survived&quot;, &quot;died&quot;))]</code></pre>
+<div id="loocv" class="section level3">
+<h3>LOOCV</h3>
+<pre class="r"><code># define training set
+set.seed(1234)
+train_control &lt;- trainControl(method=&quot;loocv&quot;, classProbs = TRUE)
+
+# train the model
+#install.packages(&#39;e1071&#39;, dependencies=TRUE)
+library(e1071)
+set.seed(1234)
+model_1 &lt;- train(Survived ~ Fare + Sex, data=data_train, 
+                 trControl=train_control, method=&quot;glm&quot;, family = &quot;binomial&quot;)</code></pre>
+<pre><code>## Warning in nominalTrainWorkflow(x = x, y = y, wts = weights, info =
+## trainInfo, : There were missing values in resampled performance measures.</code></pre>
+<pre class="r"><code># summarize results
+# model_1
+# Accuracy   Kappa
+# 0.7822671  0    </code></pre>
+</div>
+<div id="fold-cross-validation" class="section level3">
+<h3>10-fold cross validation</h3>
+<pre class="r"><code>set.seed(1234)
+train_control_2 &lt;- trainControl(method=&quot;cv&quot;, number=10)
+# train the model
+model_2 &lt;- train(Survived ~ Fare + Sex, data=data_train, 
+                 trControl=train_control_2, method=&quot;glm&quot;, family = &quot;binomial&quot;)
+# summarize results
+# model_2
+# Accuracy   Kappa    
+# 0.7834207  0.5375082</code></pre>
+<p><em>Accuracy of the 10-fold cross validation model is greater, which was unexpected.</em></p>
+<p>Compare the accuracy of the model estimated by two resampling methods</p>
+<pre class="r"><code>summary(model_1$resample)</code></pre>
+<pre><code>##     Accuracy          Kappa       Resample        
+##  Min.   :0.0000   Min.   :0     Length:891        
+##  1st Qu.:1.0000   1st Qu.:0     Class :character  
+##  Median :1.0000   Median :0     Mode  :character  
+##  Mean   :0.7823   Mean   :0                       
+##  3rd Qu.:1.0000   3rd Qu.:0                       
+##  Max.   :1.0000   Max.   :0                       
+##                   NA&#39;s   :697</code></pre>
+<pre class="r"><code># mean = 0.7823
+
+summary(model_2$resample)</code></pre>
+<pre><code>##     Accuracy          Kappa          Resample        
+##  Min.   :0.7191   Min.   :0.4017   Length:10         
+##  1st Qu.:0.7640   1st Qu.:0.5000   Class :character  
+##  Median :0.7809   Median :0.5224   Mode  :character  
+##  Mean   :0.7834   Mean   :0.5375                     
+##  3rd Qu.:0.7949   3rd Qu.:0.5551                     
+##  Max.   :0.8652   Max.   :0.7045</code></pre>
+<pre class="r"><code># mean = 0.7834</code></pre>
+<p>The quantiles of the accuracy measures of LOOCV extreme (either 0 or 1) because of the fact that we leave out only 1 observation as a test set - meaning that it would be either predicted a 1 or 0 (true/false).</p>
+</div>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

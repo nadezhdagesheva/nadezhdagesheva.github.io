@@ -1,0 +1,26 @@
+---
+title: "About this project"
+---
+
+In this website you will find some intriguing **Machine Learning algorithms** applied to well-known datasets. All of these projects were given to me as assignments during my academic studies at the *Central European University*. 
+
+**Some of the algorithms covered include:**
+
+ * Benchmark models such as linear, logistic regression and decision trees. Penalty models - lasso, ridge and elastic net.
+ 
+ * Ensemble models such as Random Forests, K-means clustering, GBMs and Deep Learning (with h2o).
+ 
+ * More advanced models such as stacking.
+ 
+
+
+
+*Note: Deep Learning here will be implemented on structured data sets, hence it is often outperformed by Random Forest & GBM models. If you are interested in application of DL with image recognition and text analytics(where the true power of DL lies), please visit my [github page](https://github.com/nadezhdagesheva) .*
+
+
+
+Yours sincerely,
+
+Data Science & R enthusiast
+
+[LinkedIn profile](https://www.linkedin.com/in/nadezhda-gesheva-b92618102/)

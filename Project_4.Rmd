@@ -1,0 +1,622 @@
+---
+title: "Deep Learning with h2o"
+---
+
+
+## Deep Learning to predict show/no show medical appointments
+
+**Task 1:**
+
+**The data set is Medical Appointments dataset from the Kaggle. The goal is to build deep learning models and to experiment with parameter settings.**
+
+
+Load the medical data set. Data prep & cleanining
+```{r}
+library(data.table)
+library(magrittr)
+library(GGally)
+
+data <- fread("data\\no-show-data.csv")
+# some data cleaning
+data[, c("PatientId", "AppointmentID", "Neighbourhood") := NULL]
+setnames(data,
+         c("No-show",
+           "Age",
+           "Gender",
+           "ScheduledDay",
+           "AppointmentDay",
+           "Scholarship",
+           "Hipertension",
+           "Diabetes",
+           "Alcoholism",
+           "Handcap",
+           "SMS_received"),
+         c("no_show",
+           "age",
+           "gender",
+           "scheduled_day",
+           "appointment_day",
+           "scholarship",
+           "hypertension",
+           "diabetes",
+           "alcoholism",
+           "handicap",
+           "sms_received"))
+# for binary prediction, the target variable must be a factor
+data[, no_show := factor(no_show, levels = c("Yes", "No"))]
+data[, handicap := ifelse(handicap > 0, 1, 0)]
+
+# create new variables
+data[, gender := factor(gender)]
+data[, scholarship := factor(scholarship)]
+data[, hypertension := factor(hypertension)]
+data[, alcoholism := factor(alcoholism)]
+data[, handicap := factor(handicap)]
+data[, scheduled_day := as.Date(scheduled_day)]
+data[, appointment_day := as.Date(appointment_day)]
+data[, days_since_scheduled := as.integer(appointment_day - scheduled_day)]
+
+# clean up a little bit
+data <- data[age %between% c(0, 95)]
+data <- data[days_since_scheduled > -1]
+data[, c("scheduled_day", "appointment_day", "sms_received") := NULL]
+
+```
+
+
+### Initialize h2o
+```{r, message=FALSE}
+library(h2o)
+h2o.init()
+# h2o.shutdown() <- in case of failing h2o connection
+data <- as.h2o(data)
+```
+
+
+Define train, validation & test data sets
+```{r}
+split_data <- h2o.splitFrame(data, 
+                             ratios = c(0.05, 0.45),
+                             seed = 987)
+
+train_set <- split_data[[1]]
+valid_set <- split_data[[2]]
+test_set <- split_data[[3]]
+
+y <- "no_show"
+X <- setdiff(names(data), y)
+```
+
+
+### Train a benchmark Random Forest model on train & evaluate on validation set.
+```{r}
+RF_params <- list(ntrees = c(500), mtries = c(3, 5), max_depth = c(2,5))
+RF_grid <- h2o.grid(x = X,
+                    y = y,
+                    training_frame = train_set,
+                    algorithm = 'randomForest',
+                    seed = 987,
+                    hyper_params = RF_params)
+
+h2o.getGrid(grid_id = RF_grid@grid_id, sort_by = "AUC", decreasing = FALSE)
+
+```
+
+
+```{r}
+# get the best model with the OOB highest AUC = 0.7147921425572161 - with index 2
+RF_model <- h2o.getModel(h2o.getGrid(RF_grid@grid_id)@model_ids[[2]])
+RF_model
+```
+
+
+
+```{r}
+h2o.auc(h2o.performance(RF_model, newdata = valid_set))
+```
+
+**AUC of benchmark RF model on validation set = 0.7222011.**
+
+
+
+## Deep Learning models
+
+
+###  Step 1 - experiment with:
+
+a) Models DL_model_1a: shallower layers with more neurons (2 layers with 200 neurons per layer) 
+
+b) Models DL_model_1b: deeper layer architecture with less neurons per leayer (5 layers with 50 neurons).
+ 
+
+### DL_model_1a 
+```{r}
+DL_model_1a <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  hidden = c(200, 200),
+  validation_frame = valid_set,
+  stopping_metric = 'AUC',  
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987
+  )
+
+print(h2o.performance(DL_model_1a, valid_set)@metrics$AUC)
+```
+
+**Validation AUC for DL_model_1a = 0.7132144**
+
+
+### DL_model_1b 
+```{r}
+DL_model_1b <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  hidden = c(50, 50, 50, 50, 50),
+  validation_frame = valid_set,
+  stopping_metric = 'AUC',  
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987
+)
+print(h2o.performance(DL_model_1b, valid_set)@metrics$AUC)
+```
+
+**Validation AUC for DL_model_1b = 0.7092839**
+
+
+*DL_model_1a(less layers with more nodes) performs better on the validation set. Thus, I will continue further experiments with it.*
+
+
+
+## Step 2
+### Experiment with Dropout(both hidden and input layers) with DL_model_1a
+
+### DL_model_3a
+```{r}
+# Lower ratios to both input and hidden layers
+DL_model_3a <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  activation = 'RectifierWithDropout',
+  hidden = c(200, 200),
+  input_dropout_ratio = 0.1,
+  hidden_dropout_ratios = c(0.3, 0.3),
+  validation_frame = valid_set,
+  stopping_metric = 'AUC',  
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987
+)
+
+print(h2o.performance(DL_model_3a, valid_set)@metrics$AUC)
+```
+
+**AUC = 0.7111045 (still not higher AUC compared to original DL_model_1a)**
+
+
+### DL_model_3b
+```{r}
+# Higher ratios to both input and hidden layers
+DL_model_3b <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  activation = 'RectifierWithDropout',
+  hidden = c(200, 200),
+  input_dropout_ratio = 0.2,
+  hidden_dropout_ratios = c(0.7, 0.7),
+  validation_frame = valid_set,
+  stopping_metric = 'AUC',  
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987
+)
+
+print(h2o.performance(DL_model_3b, valid_set)@metrics$AUC)
+```
+
+**AUC = 0.6870698 (pretty low since we increased the drop-out ratio significantly)**
+
+
+### Step 3
+### Continue with the original model DL_model_1a and implement lasso/ridge regularization
+### DL_model_5a
+```{r}
+# Lasso
+DL_model_5a <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  hidden = c(200, 200),
+  l1 = 1e-4,
+  validation_frame = valid_set,
+  stopping_metric = 'AUC',  
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987
+)
+
+print(h2o.performance(DL_model_5a, valid_set)@metrics$AUC)
+```
+
+**AUC = 0.7133694 on validation set. This Deep Learning model with lasso regularization outperforms all previous.**
+
+
+### DL_model_5b
+```{r}
+# Change l1 value(penalty) and explore the result
+DL_model_5b <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  hidden = c(200, 200),
+  l1 = 1e-6,
+  validation_frame = valid_set,
+  stopping_metric = 'AUC',  
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987
+)
+print(h2o.performance(DL_model_5b, valid_set)@metrics$AUC)
+```
+
+**AUC = 0.713491 (even better!!!)**
+
+
+### Ridge
+### DL_model_5c
+```{r}
+# Check whether regularization with ridge would bring an improvement
+DL_model_5c <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  hidden = c(200, 200),
+  l2 = 1e-4,
+  validation_frame = valid_set,
+  stopping_metric = 'AUC',  
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987
+)
+print(h2o.performance(DL_model_5c, valid_set)@metrics$AUC)
+```
+
+**AUC = 0.7134781 (outperforms lasso with value for l1=1e-04, but not lasso with l1=1e-6)**
+
+### DL_model_5d
+```{r}
+# Check with l2 = 1e-6
+DL_model_5d <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  hidden = c(200, 200),
+  l2 = 1e-6,
+  validation_frame = valid_set,
+  stopping_metric = 'AUC',  
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987)
+
+h2o.performance(DL_model_5d, valid_set)@metrics$AUC
+```
+
+**AUC = 0.7132411 (weaker performance)**
+
+
+*Currently, DL_model_5b (with lasso l1=1e-6) performs the best on validation set with AUC = 0.713491.*
+
+
+### Step 4
+### Stopping rounds, tolerance & nb of epocs
+
+### DL_model_6b
+```{r}
+# stopping rounds = 10 (double the default of 5)
+DL_model_6b <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  hidden = c(200, 200),
+  l1 = 1e-6,
+  validation_frame = valid_set,
+  stopping_metric = 'AUC', 
+  stopping_rounds = 10,
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987
+)
+print(h2o.performance(DL_model_6b, valid_set)@metrics$AUC)
+```
+
+
+**AUC = 0.713491 (no change occurs in predictive power when we vary the stopping_rounds).**
+
+
+*Try combining it with the stopping_tolerance hyperparameter.Experiment with when the moving average of length 2 does not improve by at least 1% for 2 consecutive scoring events.*
+
+
+### DL_model_7a 
+```{r}
+# check with 1% improvement per any 2 consecutive scoring events
+DL_model_7a <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  hidden = c(200, 200),
+  l1 = 1e-6,
+  validation_frame = valid_set,
+  stopping_metric = 'AUC', 
+  stopping_rounds = 2,
+  stopping_tolerance=0.01,
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987)
+print(h2o.performance(DL_model_7a, valid_set)@metrics$AUC)
+```
+
+**AUC = 0.7123891 (lower performance bc we initiated an earlier stop).**
+
+
+### Experiment with various nb of epocs
+### DL_model_8a
+```{r}
+# First try is with 50(instead of the default which equals 10)
+DL_model_8a <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  hidden = c(200, 200),
+  l1 = 1e-6,
+  validation_frame = valid_set,
+  stopping_metric = 'AUC',  
+  epochs = 50,
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987)
+print(h2o.performance(DL_model_8a, valid_set)@metrics$AUC)
+```
+
+
+**AUC = 0.7147841 (beats previous top performer whose AUC was 0.713491!). Indeed the training epochs matter and are essential deteminant of how the DL model learns.**
+
+
+### DL_model_8b
+```{r}
+# Second try is with 100(double the previous iteration)
+DL_model_8b <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  hidden = c(200, 200),
+  l1 = 1e-6,
+  validation_frame = valid_set,
+  stopping_metric = 'AUC',  
+  epochs = 100,
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987)
+print(h2o.performance(DL_model_8b, valid_set)@metrics$AUC)
+```
+
+
+
+**AUC = 0.7147841 (same as previous one). It seems that increasing the training epocs to 100 does not bring additional performance improvement. Hence, I decide to keep DL_model_8a (less complex model with the same performance.)**
+
+
+
+**On the validation dataset:**
+
+*It seems that the benchmark model of RF(RF_model) got AUC of 0.722178 which outperforms any deep learning model that I built including the top performer(DL_model_8a) with AUC = 0.7147627.*
+
+
+
+### Let's check how the benchmark RF and top deep learning model perform on the test data.
+
+```{r}
+h2o.performance(RF_model, test_set)@metrics$AUC  # AUC = 0.7184559
+h2o.performance(DL_model_8a, test_set)@metrics$AUC # AUC = 0.7086608
+```
+
+**On test set:**
+
+**Again RF algo outperforms the top deep learning model.**
+
+*Deep learning algorithms necessitate large datasets to work well(where our train set for the medical data consists of only 5505 observations), and there is also the need to train them in reasonable time(low learning rate). They also work best on image classification, NLP and speech recognition. Since our problem asks to predict a binary outcome of show or no-show patients, indeed we might expect that a Random Forest model might perform better(still in terms of AUC both models are pretty close).*
+
+
+
+
+
+
+## Stacking with 4 base learners to predict show/no show medical appointments
+
+**Task 2:**
+
+**Employ the same data set and data splits.**
+
+
+### Build models of 4 families with cv & estimate perf on valid set
+
+### Model 1 - generalized logistic model with lasso regularization
+```{r}
+glm_fit <- h2o.glm(X, y, 
+                   training_frame = train_set,
+                   family = 'binomial',
+                   alpha = 1,
+                   nfolds = 5, 
+                   seed = 987,
+                   keep_cross_validation_predictions = TRUE
+                   )
+print(h2o.auc(glm_fit, xval = TRUE))
+# AUC on train set = 0.6366341
+
+print(h2o.auc(h2o.performance(glm_fit, newdata = valid_set, xval = TRUE)))
+# AUC on valid set = 0.6629798
+```
+
+
+### Model 2 - Random Forest
+```{r}
+rf_params <- list(ntrees = c(500), mtries = c(3), max_depth = c(5))
+rf_grid <- h2o.grid(x = X,
+                    y = y,
+                    training_frame = train_set,
+                    algorithm = 'randomForest',
+                    nfolds = 5,
+                    seed = 987,
+                    hyper_params = rf_params,
+                    keep_cross_validation_predictions = TRUE)
+
+rf_model <- h2o.getModel(h2o.getGrid(rf_grid@grid_id)@model_ids[[1]])
+
+print(h2o.auc(rf_model, xval = TRUE))
+# AUC on train = 0.7127351
+
+print(h2o.auc(h2o.performance(rf_model, newdata = valid_set, xval = TRUE)))
+# AUC on valid set = 0.7222011
+```
+
+
+### Model 3 - Gradient Boosting
+```{r}
+gbm_model <- h2o.gbm(
+  X, y,
+  training_frame = train_set,
+  ntrees = 200, 
+  max_depth = 10, 
+  learn_rate = 0.1, 
+  seed = 987,
+  nfolds = 5, 
+  keep_cross_validation_predictions = TRUE)
+
+print(h2o.auc(gbm_model, xval = TRUE))
+# AUC on train = 0.6832158
+
+print(h2o.auc(h2o.performance(gbm_model, newdata = valid_set, xval = TRUE)))
+# AUC on valid set = 0.6885345
+```
+
+
+### Model 4 - Deep Learning with CV
+```{r}
+deeplearning_model <- h2o.deeplearning(
+  X, y,
+  training_frame = train_set,
+  hidden = c(200, 200),
+  l1 = 1e-6,
+  validation_frame = valid_set,
+  stopping_metric = 'AUC',  
+  nfolds = 5,
+  keep_cross_validation_predictions = TRUE,
+  reproducible = TRUE,
+  seed = 987)
+
+print(h2o.auc(deeplearning_model, xval = TRUE))
+# AUC on train = 0.6492181 (a bit better performance than the glm with lasso)
+
+print(h2o.auc(h2o.performance(deeplearning_model, newdata = valid_set, xval = TRUE)))
+# AUC on valid set = 0.712894 (second best after random forest)
+```
+
+
+**Best individual performance with CV is RF: AUC on valid set = 0.7222011.**
+
+
+### Correlations bw base learners on validation set
+
+```{r}
+predictions <- data.table(
+  "glm" = as.data.frame(h2o.predict(glm_fit, newdata = valid_set)$Yes)$Yes,
+  "rf" = as.data.frame(h2o.predict(rf_model, newdata = valid_set)$Yes)$Yes,
+  "gbm" = as.data.frame(h2o.predict(gbm_model, newdata = valid_set)$Yes)$Yes,
+  "dl" = as.data.frame(h2o.predict(deeplearning_model, newdata = valid_set)$Yes)$Yes)
+
+ggcorr(predictions, label = TRUE, label_round = 2)
+```
+
+**Highest correlation: dl & rf**
+
+**Lowest correlation: gbm & glm**
+
+
+### We will create 3 ensemble models by defining 3 meta learners:
+ 
+ - Default Random Forest 
+ 
+ - Gradient boosting
+ 
+ - Deep Learning
+
+
+*Note: *
+
+*I am not sure how to implement seed in the stacked ensemble models. Although the documentation states that there is a seed option, it gives me error message. Oddly enough, the AUC does not change for ensemble model with metalearner 'gbm', but it does for 'glm', 'drf' & 'deeplearning'.*  
+
+
+Default Random Forest as a metalearner
+```{r}
+ensemble_drf <- h2o.stackedEnsemble(
+  X, y,
+  training_frame = train_set,
+  metalearner_algorithm = "drf",
+  base_models = list(glm_fit,
+                     rf_model,
+                     gbm_model,
+                     deeplearning_model))
+
+print(h2o.auc(h2o.performance(ensemble_drf, newdata = valid_set)))
+```
+
+**Poorer performance when compared to individual RF model & deep learning model perf on validation set.**
+
+
+GBM as a metalearner
+```{r}
+ensemble_gbm <- h2o.stackedEnsemble(
+  X, y,
+  training_frame = train_set,
+  metalearner_algorithm = "gbm",
+  base_models = list(glm_fit,
+                     rf_model,
+                     gbm_model,
+                     deeplearning_model))
+
+print(h2o.auc(h2o.performance(ensemble_gbm, newdata = valid_set)))
+```
+
+**Performs poorer than individual rf & deep learning models on validation set.**
+
+
+Deep Learning as a metalearner
+```{r}
+ensemble_dl <- h2o.stackedEnsemble(
+  X, y,
+  training_frame = train_set,
+  metalearner_algorithm = "deeplearning",
+  base_models = list(glm_fit,
+                     rf_model,
+                     gbm_model,
+                     deeplearning_model))
+
+print(h2o.auc(h2o.performance(ensemble_dl, newdata = valid_set)))
+```
+
+**Poorer performance when compared to individual RF model & deep learning model perf on validation set.**
+
+
+**The best among ensembled models turns out to be the GBM as a metalearner but still worse than individual perf of RF on valid set.**
+
+
+
+
+**Why didn't the ensemble model perform better?**
+
+*Conclusion - we did not achieve an improvement of the base learner RF model. One might explain the poor results of the ensemble models on validation set by assuming that by implementing all 4 base learners we also model noise data. Another possible explanation might be the small size of the train data set.*
+
+
+### Evaluate best ensemble model on test set - GBM
+```{r}
+h2o.auc(h2o.performance(ensemble_gbm, newdata = test_set))
+```
+
+** Test set AUC = 0.6979972 (a bit worse than valid set AUC = 0.7027191).**
+
+
+```{r}
+sessionInfo()
+```

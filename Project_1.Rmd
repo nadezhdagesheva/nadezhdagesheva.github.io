@@ -1,0 +1,217 @@
+---
+title: "Benchmark models implementing CV and LOOCV"
+subtitle: "Linear model, logistic regression & regression tree"
+---
+
+**Task 1:**
+
+**Predict developer salaries using the Stackoverflow Annual Developer Survey 2017. The dataset is downloaded from Kaggle.**
+
+
+## Load libraries and data set 
+
+```{r}
+library(data.table)
+library(caret)
+library(ggplot2)
+
+data <- fread("data\\survey_results_public_selected.csv")
+```
+
+
+## Data cleaning
+
+Data cleaning is an essential part of the data analytics process. We need to be aware
+of missing values for some variables, we would like to differentiate between
+different countries and how often we have them in our dataset. We would aslo like
+clean the data from unintuitive values.
+
+```{r}
+data <- data[!is.na(Salary) & Salary > 0]
+data <- data[complete.cases(data)]
+data <- data[, Gender := ifelse(Gender == "Male", "Male",
+                                ifelse(Gender == "Female", "Female", "Other"))]
+# filter for large countries
+large_countries <- data[, .N, by = "Country"][N > 60][["Country"]]
+data <- data[, Country := ifelse(Country %in% large_countries, Country, "Other")]
+```
+
+## Exploratory Data Analysis
+
+```{r, warnings = FALSE}
+ggplot(aes(Salary), data = data) + geom_histogram() + 
+  ggtitle("Distribution of developer salaries") + theme_light()
+```
+
+The distribution of the salaries is positively skewed with a long right tail. The peak is around 50 000$, however there are few extreme values in the higher ranges.
+
+```{r}
+ggplot(data, aes(Gender, Salary)) + 
+  geom_boxplot(colour = "darkgreen",  fill = "white") + ggtitle("Boxplot per gender") +
+  theme_light()
+```
+
+We see that in all countries, regardless of gender, developers on average get paid
+approximately the same salary. The median is similarly the same for males and females
+(around 50 000$), while the "other" category (which stands for missing data?) is slightly lower. Another observation that should be pointed out is that the upper whisker is more populated for males than for females. This suggests different salary range. Let's investigate more.
+
+```{r}
+ggplot(aes(Gender, Salary), data = data) + geom_point() + facet_wrap( ~ Country) + 
+  ggtitle("Distribution of Develper salaries with per country breakdown") + theme_light()
+```
+
+We see that in all countries, the range of salaries that male developers earn is larger than the respective wage range for females.
+
+
+## Model prediction
+
+We will train two predictive models to predict the logarithm of Salary using the caret package.  
+
+```{r}
+# create log_salary
+data <- data[, log_salary := log(Salary)]
+
+# create training and test set
+training_ratio <- 0.7
+set.seed(1234)
+train_indices <- createDataPartition(y = data[["log_salary"]],
+                                     times = 1,
+                                     p = training_ratio,
+                                     list = FALSE)
+train_set <- data[train_indices, ]
+test_set <- data[-train_indices, ]
+```
+
+```{r}
+# set the cross validation -10 folds
+set.seed(1234)
+train_control <- trainControl(method = "cv", number = 10)
+```
+
+Linear model
+```{r}
+# linear model with all variables as explanatory apart from Salary
+linear_fit <- train(log_salary ~ . -Salary, method = "lm", data = train_set, 
+                    trControl = train_control)
+# linear_fit performance
+# RMSE       Rsquared   MAE      
+# 0.9569742  0.4973999  0.5446188
+```
+
+Regression Tree
+```{r}
+# a regression tree
+tune_grid <- data.frame("cp" = c(0.01, 0.001, 0.0001, 0.00001, 0.000001))
+set.seed(1234)
+rpart_fit <- train(log_salary ~ . -Salary, 
+                   data = train_set, 
+                   method = "rpart", 
+                   trControl = train_control,
+                   tuneGrid = tune_grid)
+#rpart_fit
+# cp     RMSE       Rsquared   MAE      
+# 1e-06  1.0176615  0.4389875  0.5844119
+# 1e-05  1.0171127  0.4394886  0.5838310
+# 1e-04  1.0127748  0.4430201  0.5789464
+# 1e-03  0.9898655  0.4626986  0.5733854  # WINNER among regression trees with lowest RMSE.
+# 1e-02  1.0631265  0.3795067  0.6406908
+
+# The final value used for the model was cp = 0.001.
+```
+
+**It seems that with 10-fold cross validation, the lin regression has better performance on training dataset.**
+
+
+Check out the performance on test set of the better model - lin reg 
+
+```{r}
+linear_rmse_test <- RMSE(predict.train(linear_fit, test_set), 
+                         test_set[["log_salary"]])
+
+linear_rmse_test 
+```
+
+The RMSE on test set of the linear model is 0.9636814, which is a bit higher than the RMSE of the training set.
+
+
+## Compare the true and predicted values of the test set on a graph
+```{r}
+predicted <- predict.train(linear_fit, test_set)
+
+ggplot(test_set, aes(test_set$log_salary, predicted)) + geom_point(color = "darkgreen") + 
+  labs(x = "actual", y = "predicted") + theme_light() + ggtitle("Predicted vs actual Salary(in logs)")
+
+```
+
+
+*The graph shows us a clear positive relationship between actual and redicted values of log_salary. If our model was perfect, then we would have observed a straight 45 degree line.*
+
+
+
+
+**Task 2:**
+
+**Compare performance of LOOCV & k-fold CV on the Titanic dataset to predict whether a person survived by employing logistic regression.**
+
+
+Some thoughts on the topic:
+
+A disadvantage when we use a k-fold cross validation is that we might create a model that works
+perfectly on a given dataset, but performs poorly on another one (i.e., "overfitting" issue). Nevertheless,  since it is an exhaustive model training the data on all data points but one, it would show us various performances given all possible combinations of our observations, hence the "real" performance of the model. Also, the bias is smaller compared to when we employ k-fold cross validation.
+
+
+```{r}
+library(titanic)
+data_train <- data.table(titanic_train)
+# recode Survived to factor - needed for binary prediction
+data_train[, Survived := factor(ifelse(Survived == 1, "survived", "died"))]
+```
+
+### LOOCV
+```{r}
+# define training set
+set.seed(1234)
+train_control <- trainControl(method="loocv", classProbs = TRUE)
+
+# train the model
+#install.packages('e1071', dependencies=TRUE)
+library(e1071)
+set.seed(1234)
+model_1 <- train(Survived ~ Fare + Sex, data=data_train, 
+                 trControl=train_control, method="glm", family = "binomial")
+
+# summarize results
+# model_1
+# Accuracy   Kappa
+# 0.7822671  0    
+```
+
+
+### 10-fold cross validation
+```{r}
+set.seed(1234)
+train_control_2 <- trainControl(method="cv", number=10)
+# train the model
+model_2 <- train(Survived ~ Fare + Sex, data=data_train, 
+                 trControl=train_control_2, method="glm", family = "binomial")
+# summarize results
+# model_2
+# Accuracy   Kappa    
+# 0.7834207  0.5375082
+```
+
+*Accuracy of the 10-fold cross validation model is greater, which was unexpected.* 
+
+
+Compare the accuracy of the model estimated by two resampling methods
+```{r}
+summary(model_1$resample)
+# mean = 0.7823
+
+summary(model_2$resample)
+# mean = 0.7834
+```
+
+
+The quantiles of the accuracy measures of LOOCV extreme (either 0 or 1) because of the fact that we leave out only 1 observation as a test set - meaning that it would be either predicted a 1 or 0 (true/false). 
+

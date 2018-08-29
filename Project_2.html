@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+
+
+
+<title>Principal Component Analysis on both Supervised &amp; Unsupervised ML algorithms. Regularization models &amp; Clustering</title>
+
+<script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+</style>
+
+
+<style type="text/css">
+/* padding for bootstrap navbar */
+body {
+  padding-top: 51px;
+  padding-bottom: 40px;
+}
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h1 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+
+.section h2 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h3 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h4 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h5 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+.section h6 {
+  padding-top: 56px;
+  margin-top: -56px;
+}
+</style>
+
+<script>
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.parent().addClass('active');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+});
+</script>
+
+
+<div class="container-fluid main-container">
+
+<!-- tabsets -->
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+</script>
+
+<!-- code folding -->
+
+
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">Nadezhda Gesheva</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Data Science with R</a>
+</li>
+<li>
+  <a href="Project_1.html">CV &amp; LOOCV</a>
+</li>
+<li>
+  <a href="Project_2.html">PCA, Clustering &amp; Regularization</a>
+</li>
+<li>
+  <a href="Project_3.html">Ensemble Models</a>
+</li>
+<li>
+  <a href="Project_4.html">DL and stacking</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">Principal Component Analysis on both Supervised &amp; Unsupervised ML algorithms. Regularization models &amp; Clustering</h1>
+
+</div>
+
+
+<p>Load libraries</p>
+<pre class="r"><code>library(data.table)
+library(datasets)
+library(MASS)
+library(ISLR)
+library(caret)
+library(ggplot2)
+library(GGally)
+library(factoextra)
+library(NbClust)</code></pre>
+<div id="pca-for-supervised-learning-and-penalized-models-compared-to-benchmark-lm." class="section level2">
+<h2>PCA for supervised learning and Penalized models compared to benchmark lm.</h2>
+<p><strong>Task 1:</strong></p>
+<p><strong>Analyze the Boston dataset from the MASS package.</strong></p>
+<p>Load the data &amp; Data exploration</p>
+<pre class="r"><code>data &lt;- data.table(Boston)
+ggcorr(data)</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<p>The graph suggests that the highest correlation is bw crim and {indus,nox,age,rad,tax,lstat} Lets graph them.</p>
+<p>Scatter plots</p>
+<pre class="r"><code># INDUS - proportion of non-retail business acres per town.
+ggplot(data, aes(x = indus, y = crim)) + geom_point(color = &quot;darkgreen&quot;) + theme_classic()</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+<pre class="r"><code># NOX - nitric oxides concentration (parts per 10 million)
+ggplot(data, aes(x = nox, y = crim)) + geom_point(color = &quot;darkgreen&quot;) + theme_classic()</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-2-2.png" width="672" /></p>
+<pre class="r"><code># proportion of owner-occupied units built prior to 1940
+ggplot(data, aes(x = age, y = crim)) + geom_point(color = &quot;darkgreen&quot;) + theme_classic()</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-2-3.png" width="672" /></p>
+<pre class="r"><code># index of accessibility to radial highways
+ggplot(data, aes(x = rad, y = crim)) + geom_point(color = &quot;darkgreen&quot;) + theme_classic()</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-2-4.png" width="672" /></p>
+<pre class="r"><code># full-value property-tax rate per $10,000
+ggplot(data, aes(x = tax, y = crim)) + geom_point(color = &quot;darkgreen&quot;) + theme_classic()</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-2-5.png" width="672" /></p>
+<pre class="r"><code># % lower status of the population
+ggplot(data, aes(x = lstat, y = crim)) + geom_point(color = &quot;darkgreen&quot;) + theme_classic()</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-2-6.png" width="672" /></p>
+<p>Use this set as possible explanatory variables {indus,nox,age,rad,tax,lstat} for predicting crime rate.</p>
+<p>Create a training and a test set of 50%</p>
+<pre class="r"><code>training_ratio &lt;- 0.5
+set.seed(1234)
+train_indices &lt;- createDataPartition(y = data[[&quot;crim&quot;]],
+                                     times = 1,
+                                     p = training_ratio,
+                                     list = FALSE)
+train_set &lt;- data[train_indices, ]
+test_set &lt;- data[-train_indices, ]</code></pre>
+<p>Use a linear regression to predict crim and use 10-fold cross validation to assess the predictive power.</p>
+<pre class="r"><code>set.seed(1234)
+lm_fit &lt;- train(crim ~ indus + nox + age + rad + tax + lstat,
+                data = train_set, 
+                method = &quot;lm&quot;, 
+                trControl = trainControl(method = &quot;cv&quot;, number = 10),
+                preProcess = c(&quot;center&quot;, &quot;scale&quot;))
+lm_fit</code></pre>
+<pre><code>## Linear Regression 
+## 
+## 254 samples
+##   6 predictor
+## 
+## Pre-processing: centered (6), scaled (6) 
+## Resampling: Cross-Validated (10 fold) 
+## Summary of sample sizes: 228, 230, 230, 227, 229, 228, ... 
+## Resampling results:
+## 
+##   RMSE      Rsquared  MAE     
+##   5.913542  0.644013  2.964199
+## 
+## Tuning parameter &#39;intercept&#39; was held constant at a value of TRUE</code></pre>
+<pre class="r"><code># RMSE      Rsquared  MAE     
+# 5.913542  0.644013  2.964199</code></pre>
+<div id="try-to-improve-the-model-by-using-pca-for-dimensionality-reduction." class="section level3">
+<h3>Try to improve the model by using PCA for dimensionality reduction.</h3>
+<pre class="r"><code># Search for the appropriate dimension for the PCA component
+tune_grid &lt;- data.frame(ncomp = 1:6) # ncomp = nb of explanatory vars
+set.seed(1234)
+pcr_fit &lt;- train(crim ~ indus + nox + age + rad + tax + lstat,
+                 data = train_set, 
+                 method = &quot;pcr&quot;, 
+                 trControl = trainControl(method = &quot;cv&quot;, number = 10),
+                 tuneGrid = tune_grid,
+                 preProcess = c(&quot;center&quot;, &quot;scale&quot;) # essential to normalize data
+)
+pcr_fit</code></pre>
+<pre><code>## Principal Component Analysis 
+## 
+## 254 samples
+##   6 predictor
+## 
+## Pre-processing: centered (6), scaled (6) 
+## Resampling: Cross-Validated (10 fold) 
+## Summary of sample sizes: 228, 230, 230, 227, 229, 228, ... 
+## Resampling results across tuning parameters:
+## 
+##   ncomp  RMSE      Rsquared   MAE     
+##   1      6.441712  0.5293864  3.768553
+##   2      6.098177  0.6125413  3.115906
+##   3      5.935138  0.6398305  3.097011
+##   4      5.910706  0.6422024  3.076756
+##   5      5.935354  0.6370750  3.097051
+##   6      5.913542  0.6440130  2.964199
+## 
+## RMSE was used to select the optimal model using the smallest value.
+## The final value used for the model was ncomp = 4.</code></pre>
+<p>RMSE = 5.910706, was used to select the optimal model using the smallest value. The final value used for the model was ncomp = 4 hence the PCA Dimension should equal 4. The PCA with 4 dimensions diminishes the RMSE a bit (5.913542 vs 5.910706). Hence, it improves the fit of the simple linear model.</p>
+</div>
+<div id="use-penalized-linear-models-for-the-same-task." class="section level3">
+<h3>Use penalized linear models for the same task.</h3>
+<pre class="r"><code>set.seed(1234)
+fit_control &lt;- trainControl(method = &quot;cv&quot;, number = 10)
+
+# alpha param - differentiate bw lasso(1), ridge(0) and elastic net((0,1)).
+# lambda param - define the penalty param 
+tune_grid &lt;- expand.grid(&quot;alpha&quot; = seq(0, 1, 0.1), &quot;lambda&quot; = c(0.1, 0.01, 0.001, 0.0001))
+set.seed(1234)
+gmlnet_fit &lt;- train(crim ~ indus + nox + age + rad + tax + lstat,
+                   data = train_set, 
+                   method = &quot;glmnet&quot;, 
+                   preProcess = c(&quot;center&quot;, &quot;scale&quot;), # essential to normalize data
+                   tuneLength = 10,
+                   tuneGrid = tune_grid,
+                   trControl = fit_control)
+gmlnet_fit</code></pre>
+<pre><code>## glmnet 
+## 
+## 254 samples
+##   6 predictor
+## 
+## Pre-processing: centered (6), scaled (6) 
+## Resampling: Cross-Validated (10 fold) 
+## Summary of sample sizes: 228, 230, 230, 227, 229, 228, ... 
+## Resampling results across tuning parameters:
+## 
+##   alpha  lambda  RMSE      Rsquared   MAE     
+##   0.0    1e-04   5.878563  0.6441750  2.943299
+##   0.0    1e-03   5.878563  0.6441750  2.943299
+##   0.0    1e-02   5.878563  0.6441750  2.943299
+##   0.0    1e-01   5.878563  0.6441750  2.943299
+##   0.1    1e-04   5.908002  0.6444875  2.958223
+##   0.1    1e-03   5.908002  0.6444875  2.958223
+##   0.1    1e-02   5.908002  0.6444875  2.958223
+##   0.1    1e-01   5.897987  0.6453877  2.946699
+##   0.2    1e-04   5.906924  0.6447176  2.955682
+##   0.2    1e-03   5.906924  0.6447176  2.955682
+##   0.2    1e-02   5.906924  0.6447176  2.955682
+##   0.2    1e-01   5.893843  0.6461705  2.937319
+##   0.3    1e-04   5.906672  0.6449136  2.952997
+##   0.3    1e-03   5.906672  0.6449136  2.952997
+##   0.3    1e-02   5.906672  0.6449136  2.952997
+##   0.3    1e-01   5.890114  0.6468911  2.928726
+##   0.4    1e-04   5.905180  0.6451366  2.950824
+##   0.4    1e-03   5.905180  0.6451366  2.950824
+##   0.4    1e-02   5.905180  0.6451366  2.950824
+##   0.4    1e-01   5.886695  0.6474993  2.920989
+##   0.5    1e-04   5.905836  0.6451113  2.951967
+##   0.5    1e-03   5.905836  0.6451113  2.951967
+##   0.5    1e-02   5.905836  0.6451113  2.951967
+##   0.5    1e-01   5.883328  0.6480192  2.914175
+##   0.6    1e-04   5.907166  0.6450060  2.952609
+##   0.6    1e-03   5.907166  0.6450060  2.952609
+##   0.6    1e-02   5.907166  0.6450060  2.952609
+##   0.6    1e-01   5.880815  0.6483883  2.909408
+##   0.7    1e-04   5.907288  0.6449700  2.952927
+##   0.7    1e-03   5.907288  0.6449700  2.952927
+##   0.7    1e-02   5.907288  0.6449700  2.952927
+##   0.7    1e-01   5.878608  0.6486193  2.906668
+##   0.8    1e-04   5.907628  0.6449468  2.953222
+##   0.8    1e-03   5.907628  0.6449468  2.953222
+##   0.8    1e-02   5.907628  0.6449468  2.953222
+##   0.8    1e-01   5.876557  0.6488364  2.904801
+##   0.9    1e-04   5.907849  0.6449490  2.953438
+##   0.9    1e-03   5.907849  0.6449490  2.953438
+##   0.9    1e-02   5.907807  0.6449647  2.953354
+##   0.9    1e-01   5.875098  0.6490305  2.903098
+##   1.0    1e-04   5.907461  0.6448067  2.952258
+##   1.0    1e-03   5.907461  0.6448067  2.952258
+##   1.0    1e-02   5.906953  0.6449022  2.951476
+##   1.0    1e-01   5.873795  0.6491664  2.900587
+## 
+## RMSE was used to select the optimal model using the smallest value.
+## The final values used for the model were alpha = 1 and lambda = 0.1.</code></pre>
+<p>The final values used for the model were alpha = 1(lasso) and lambda = 0.1.</p>
+<p>RMSE = 5.873795, pretty close to previous model RMSE results but better than PCA with dim 4 and simple linear model.</p>
+</div>
+<div id="regularized-models-and-pca" class="section level3">
+<h3>Regularized models and PCA</h3>
+<pre class="r"><code># add PCA
+set.seed(1234)
+gmlnet_fit2 &lt;- train(crim ~ indus + nox + age + rad + tax + lstat,
+                    data = train_set, 
+                    method = &quot;glmnet&quot;, 
+                    preProcess = c(&quot;center&quot;, &quot;scale&quot;, &quot;pca&quot;),
+                    tuneLength = 10,
+                    tuneGrid = tune_grid,
+                    trControl = fit_control)
+gmlnet_fit2</code></pre>
+<pre><code>## glmnet 
+## 
+## 254 samples
+##   6 predictor
+## 
+## Pre-processing: centered (6), scaled (6), principal component
+##  signal extraction (6) 
+## Resampling: Cross-Validated (10 fold) 
+## Summary of sample sizes: 228, 230, 230, 227, 229, 228, ... 
+## Resampling results across tuning parameters:
+## 
+##   alpha  lambda  RMSE      Rsquared   MAE     
+##   0.0    1e-04   5.868178  0.6422024  2.984988
+##   0.0    1e-03   5.868178  0.6422024  2.984988
+##   0.0    1e-02   5.868178  0.6422024  2.984988
+##   0.0    1e-01   5.868178  0.6422024  2.984988
+##   0.1    1e-04   5.904593  0.6421895  3.064343
+##   0.1    1e-03   5.904593  0.6421895  3.064343
+##   0.1    1e-02   5.904593  0.6421895  3.064343
+##   0.1    1e-01   5.900881  0.6421778  3.054620
+##   0.2    1e-04   5.905079  0.6421801  3.064370
+##   0.2    1e-03   5.905079  0.6421801  3.064370
+##   0.2    1e-02   5.905079  0.6421801  3.064370
+##   0.2    1e-01   5.900205  0.6421483  3.051194
+##   0.3    1e-04   5.905504  0.6421693  3.064777
+##   0.3    1e-03   5.905504  0.6421693  3.064777
+##   0.3    1e-02   5.905504  0.6421693  3.064777
+##   0.3    1e-01   5.899573  0.6421138  3.047761
+##   0.4    1e-04   5.905919  0.6421676  3.064966
+##   0.4    1e-03   5.905919  0.6421676  3.064966
+##   0.4    1e-02   5.905919  0.6421676  3.064966
+##   0.4    1e-01   5.898986  0.6420744  3.044319
+##   0.5    1e-04   5.906226  0.6421637  3.065297
+##   0.5    1e-03   5.906226  0.6421637  3.065297
+##   0.5    1e-02   5.906226  0.6421637  3.065297
+##   0.5    1e-01   5.898443  0.6420298  3.040871
+##   0.6    1e-04   5.906360  0.6421593  3.065276
+##   0.6    1e-03   5.906360  0.6421593  3.065276
+##   0.6    1e-02   5.906360  0.6421593  3.065276
+##   0.6    1e-01   5.897947  0.6419800  3.037423
+##   0.7    1e-04   5.906388  0.6421544  3.065024
+##   0.7    1e-03   5.906388  0.6421544  3.065024
+##   0.7    1e-02   5.906388  0.6421544  3.065024
+##   0.7    1e-01   5.897496  0.6419250  3.033978
+##   0.8    1e-04   5.906716  0.6421544  3.065643
+##   0.8    1e-03   5.906716  0.6421544  3.065643
+##   0.8    1e-02   5.906716  0.6421544  3.065643
+##   0.8    1e-01   5.897091  0.6418646  3.030524
+##   0.9    1e-04   5.906623  0.6421488  3.065131
+##   0.9    1e-03   5.906623  0.6421488  3.065131
+##   0.9    1e-02   5.906623  0.6421488  3.065131
+##   0.9    1e-01   5.896733  0.6417988  3.027196
+##   1.0    1e-04   5.906847  0.6421488  3.065554
+##   1.0    1e-03   5.906847  0.6421488  3.065554
+##   1.0    1e-02   5.906847  0.6421488  3.065554
+##   1.0    1e-01   5.896421  0.6417275  3.024203
+## 
+## RMSE was used to select the optimal model using the smallest value.
+## The final values used for the model were alpha = 0 and lambda = 0.1.</code></pre>
+<p>The final values used for the model were alpha = 0 and lambda = 0.1</p>
+<p>RMSE = 5.868178. Adding a PCA component to the penalized linear model improves the fit even more. However, now the best performing model is Ridge (alpha = 0).</p>
+<p>Evaluate the combined model on the test set.</p>
+<pre class="r"><code># The best perfoming model is Rigde with principal component signal extraction (6).
+test_prediction &lt;- predict.train(gmlnet_fit2, newdata = test_set)
+RMSE(test_prediction, test_set[[&quot;crim&quot;]])</code></pre>
+<pre><code>## [1] 6.262462</code></pre>
+<p><strong>RMSE = 6.262462 - performs worse on test set</strong></p>
+</div>
+</div>
+<div id="pca-for-unsupervised-learning." class="section level2">
+<h2>PCA for unsupervised learning.</h2>
+<p><strong>Task 2:</strong></p>
+<p><strong>Perform PCA on 40 observations of 1000 variables. The variables are measurments of genes of tissues of healthy and diseased patients: the first 20 observations are coming from healthy and the others from diseased patients.</strong></p>
+<p>Data comes from the ISLR package.</p>
+<p>Load and look at the tail of the data set.</p>
+<pre class="r"><code>data &lt;- fread(&quot;data\\gene_data.csv&quot;)
+data[, is_diseased := factor(is_diseased)]
+dim(data)</code></pre>
+<pre><code>## [1]   40 1001</code></pre>
+<pre class="r"><code>tail(names(data))</code></pre>
+<pre><code>## [1] &quot;measure_995&quot; &quot;measure_996&quot; &quot;measure_997&quot; &quot;measure_998&quot; &quot;measure_999&quot;
+## [6] &quot;is_diseased&quot;</code></pre>
+<p>Perform PCA on this data with scaling features.</p>
+<pre class="r"><code>data_features &lt;- copy(data)
+# drop the variable with the labels
+data_features[, is_diseased := NULL]
+dim(data_features)</code></pre>
+<pre><code>## [1]   40 1000</code></pre>
+<pre class="r"><code>pca_result &lt;- prcomp(data_features, scale. = TRUE)</code></pre>
+<p>Visualize datapoints in the space of the first two principal components</p>
+<pre class="r"><code>fviz_pca_ind(pca_result, geom = &quot;point&quot;)</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<p>This plot shows that the first dimension covers 8.1% of the variance in the whole data, while the second components accounts for 3.4%. Usually, the first dimension is expected to explain a much larger share of the variance.</p>
+<p>Which individual features matter the most in separating diseased from healthy?</p>
+<pre class="r"><code># Look for high loadings features
+# create 2 vectors with PCA nb 1 - the original and one with only abs values
+pca_1 = pca_result$rotation[,1]
+pca_1_abs = abs(pca_result$rotation[,1])
+
+# find the index of the two greatest values in abs terms
+index.top.N = function(xs, N=2){
+  if(length(xs) &gt; 0) {
+    o = order(xs, na.last=FALSE)
+    o.length = length(o)
+    if (N &gt; o.length) N = o.length
+    o[((o.length-N+1):o.length)]
+  }
+  else {
+    0
+  }
+}
+
+index.top.N(pca_1_abs,2)</code></pre>
+<pre><code>## [1] 545 450</code></pre>
+<p><strong>The indexes of the 2 greatest values in PCA 1 = {545; 450}.</strong></p>
+<pre class="r"><code>pca_1[545] # measure_589 has pca 1 = 0.09449766 </code></pre>
+<pre><code>## measure_589 
+##  0.09449766</code></pre>
+<pre class="r"><code>pca_1[450] # measure_502 has pca 1 = 0.09485044</code></pre>
+<pre><code>## measure_502 
+##  0.09485044</code></pre>
+<pre class="r"><code>ggplot(data_features, aes(measure_589, measure_502)) + geom_point(color = &quot;darkgreen&quot;) + 
+  geom_smooth(method = &quot;loess&quot;) + 
+  ggtitle(&quot;Scatter plot of the 2 features with highest loading in PC1&quot;) +
+  theme_classic()</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-14-1.png" width="672" /></p>
+<p>There seems to be a positive nonlinear relationship among these 2 features in the lower bands. However, the relationship flattens out in the higher bands.</p>
+<pre class="r"><code>ggplot(data, aes(x = measure_502, y = measure_589, color = is_diseased)) +
+  geom_point() +
+  ggtitle(&#39;Healthy and diseased patients defined by the two most important features in PC1&#39;) +
+  theme_classic()</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
+<p><strong>We observe that Dim 1 differentiates very well between the two clusters. Hence, instead of using all 1000 vars, we could use only these two features and achieve satisfactory results.</strong></p>
+</div>
+<div id="clustering" class="section level2">
+<h2>Clustering</h2>
+<p><strong>Task 3:</strong></p>
+<p><strong>Data sets used is USArrests. Our task is to apply clustering and then make sense of the clusters using the principal components.</strong></p>
+<p>Determine the optimal number of clusters</p>
+<pre class="r"><code>data &lt;- USArrests
+
+nb &lt;- NbClust(data, method = &quot;kmeans&quot;, 
+              min.nc = 2, max.nc = 10, index = &quot;all&quot;)</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+<pre><code>## *** : The Hubert index is a graphical method of determining the number of clusters.
+##                 In the plot of Hubert index, we seek a significant knee that corresponds to a 
+##                 significant increase of the value of the measure i.e the significant peak in Hubert
+##                 index second differences plot. 
+## </code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-16-2.png" width="672" /></p>
+<pre><code>## *** : The D index is a graphical method of determining the number of clusters. 
+##                 In the plot of D index, we seek a significant knee (the significant peak in Dindex
+##                 second differences plot) that corresponds to a significant increase of the value of
+##                 the measure. 
+##  
+## ******************************************************************* 
+## * Among all indices:                                                
+## * 9 proposed 2 as the best number of clusters 
+## * 6 proposed 3 as the best number of clusters 
+## * 1 proposed 4 as the best number of clusters 
+## * 3 proposed 5 as the best number of clusters 
+## * 4 proposed 7 as the best number of clusters 
+## * 1 proposed 10 as the best number of clusters 
+## 
+##                    ***** Conclusion *****                            
+##  
+## * According to the majority rule, the best number of clusters is  2 
+##  
+##  
+## *******************************************************************</code></pre>
+<pre class="r"><code>fviz_nbclust(nb)</code></pre>
+<pre><code>## Among all indices: 
+## ===================
+## * 2 proposed  0 as the best number of clusters
+## * 9 proposed  2 as the best number of clusters
+## * 6 proposed  3 as the best number of clusters
+## * 1 proposed  4 as the best number of clusters
+## * 3 proposed  5 as the best number of clusters
+## * 4 proposed  7 as the best number of clusters
+## * 1 proposed  10 as the best number of clusters
+## 
+## Conclusion
+## =========================
+## * According to the majority rule, the best number of clusters is  2 .</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-16-3.png" width="672" /></p>
+<p>By employing the NbClust, we conclud that the optimal number of clusters is 2.</p>
+<div id="create-2-means-clustering" class="section level3">
+<h3>Create 2-means clustering</h3>
+<pre class="r"><code>km_clustering &lt;- kmeans(data, centers = 2)
+km_clustering </code></pre>
+<pre><code>## K-means clustering with 2 clusters of sizes 29, 21
+## 
+## Cluster means:
+##      Murder  Assault UrbanPop     Rape
+## 1  4.841379 109.7586 64.03448 16.24828
+## 2 11.857143 255.0000 67.61905 28.11429
+## 
+## Clustering vector:
+##        Alabama         Alaska        Arizona       Arkansas     California 
+##              2              2              2              2              2 
+##       Colorado    Connecticut       Delaware        Florida        Georgia 
+##              2              1              2              2              2 
+##         Hawaii          Idaho       Illinois        Indiana           Iowa 
+##              1              1              2              1              1 
+##         Kansas       Kentucky      Louisiana          Maine       Maryland 
+##              1              1              2              1              2 
+##  Massachusetts       Michigan      Minnesota    Mississippi       Missouri 
+##              1              2              1              2              1 
+##        Montana       Nebraska         Nevada  New Hampshire     New Jersey 
+##              1              1              2              1              1 
+##     New Mexico       New York North Carolina   North Dakota           Ohio 
+##              2              2              2              1              1 
+##       Oklahoma         Oregon   Pennsylvania   Rhode Island South Carolina 
+##              1              1              1              1              2 
+##   South Dakota      Tennessee          Texas           Utah        Vermont 
+##              1              2              2              1              1 
+##       Virginia     Washington  West Virginia      Wisconsin        Wyoming 
+##              1              1              1              1              1 
+## 
+## Within cluster sum of squares by cluster:
+## [1] 54762.30 41636.73
+##  (between_SS / total_SS =  72.9 %)
+## 
+## Available components:
+## 
+## [1] &quot;cluster&quot;      &quot;centers&quot;      &quot;totss&quot;        &quot;withinss&quot;    
+## [5] &quot;tot.withinss&quot; &quot;betweenss&quot;    &quot;size&quot;         &quot;iter&quot;        
+## [9] &quot;ifault&quot;</code></pre>
+<pre class="r"><code># create new var that indicated to which cluster does the obs belong to
+data_w_clusters &lt;- cbind(data, data.table(&quot;cluster&quot; = factor(km_clustering$cluster)))</code></pre>
+<p>Visualize the two clusters</p>
+<pre class="r"><code>ggplot(data_w_clusters, 
+       aes(x = Assault, y = UrbanPop , color = cluster)) + geom_point() + theme_classic()</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-19-1.png" width="672" /></p>
+<pre class="r"><code>ggplot(data_w_clusters, 
+       aes(x = Murder, y = UrbanPop , color = cluster)) + geom_point() + theme_classic()</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-19-2.png" width="672" /></p>
+<pre class="r"><code>ggplot(data_w_clusters, 
+       aes(x = Rape, y = UrbanPop , color = cluster)) + geom_point() + theme_classic()</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-19-3.png" width="672" /></p>
+<pre class="r"><code>pca_result &lt;- prcomp(data, scale. = TRUE)
+first_two_pc &lt;- data.table(pca_result$x[, 1:2])
+data_w_pca &lt;- cbind(data_w_clusters, first_two_pc)
+#first_two_pc
+
+fviz_pca(pca_result, scale = 0)</code></pre>
+<pre><code>## Warning: Ignoring unknown parameters: scale</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-20-1.png" width="672" /></p>
+<p>The first dim captures the crime variables, while the second dim captures the urban population.</p>
+<p>Alternative visualization</p>
+<pre class="r"><code>fviz_pca_ind(pca_result, geom = &quot;point&quot;, habillage = data_w_clusters[[&#39;cluster&#39;]],
+             addEllipses=TRUE , palette = c(&quot;green&quot;, &quot;red&quot;))</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-21-1.png" width="672" /></p>
+<p>Dim 1 is a good differentiator between the two clusters.</p>
+<pre class="r"><code>ggplot(data_w_pca, aes(x = PC1, y = PC2, color = cluster)) +
+  geom_point() + geom_text(aes(label = rownames(data_w_pca))) +
+  theme_classic() + ggtitle(&quot;Cluster breakdown per Principal Component&quot;)</code></pre>
+<p><img src="Project_2_files/figure-html/unnamed-chunk-22-1.png" width="672" /></p>
+</div>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,323 @@
+---
+title: "Principal Component Analysis on both Supervised & Unsupervised ML algorithms. Regularization models & Clustering"
+---
+
+Load libraries
+```{r pressure, message}
+library(data.table)
+library(datasets)
+library(MASS)
+library(ISLR)
+library(caret)
+library(ggplot2)
+library(GGally)
+library(factoextra)
+library(NbClust)
+```
+
+## PCA for supervised learning and Penalized models compared to benchmark lm. 
+
+**Task 1:**
+
+**Analyze the Boston dataset from the MASS package.**
+
+Load the data & Data exploration
+
+```{r}
+data <- data.table(Boston)
+ggcorr(data)
+```
+
+The graph suggests that the highest correlation is bw crim and {indus,nox,age,rad,tax,lstat}
+Lets graph them.
+
+Scatter plots
+```{r}
+# INDUS - proportion of non-retail business acres per town.
+ggplot(data, aes(x = indus, y = crim)) + geom_point(color = "darkgreen") + theme_classic()
+# NOX - nitric oxides concentration (parts per 10 million)
+ggplot(data, aes(x = nox, y = crim)) + geom_point(color = "darkgreen") + theme_classic()
+# proportion of owner-occupied units built prior to 1940
+ggplot(data, aes(x = age, y = crim)) + geom_point(color = "darkgreen") + theme_classic()
+# index of accessibility to radial highways
+ggplot(data, aes(x = rad, y = crim)) + geom_point(color = "darkgreen") + theme_classic()
+# full-value property-tax rate per $10,000
+ggplot(data, aes(x = tax, y = crim)) + geom_point(color = "darkgreen") + theme_classic()
+# % lower status of the population
+ggplot(data, aes(x = lstat, y = crim)) + geom_point(color = "darkgreen") + theme_classic()
+
+```
+
+
+Use this set as possible explanatory variables {indus,nox,age,rad,tax,lstat} for predicting crime rate.
+
+
+Create a training and a test set of 50%
+
+```{r}
+training_ratio <- 0.5
+set.seed(1234)
+train_indices <- createDataPartition(y = data[["crim"]],
+                                     times = 1,
+                                     p = training_ratio,
+                                     list = FALSE)
+train_set <- data[train_indices, ]
+test_set <- data[-train_indices, ]
+```
+
+
+Use a linear regression to predict crim and use 10-fold cross validation to assess the predictive power.
+```{r}
+set.seed(1234)
+lm_fit <- train(crim ~ indus + nox + age + rad + tax + lstat,
+                data = train_set, 
+                method = "lm", 
+                trControl = trainControl(method = "cv", number = 10),
+                preProcess = c("center", "scale"))
+lm_fit
+# RMSE      Rsquared  MAE     
+# 5.913542  0.644013  2.964199
+```
+
+### Try to improve the model by using PCA for dimensionality reduction.
+
+```{r}
+# Search for the appropriate dimension for the PCA component
+tune_grid <- data.frame(ncomp = 1:6) # ncomp = nb of explanatory vars
+set.seed(1234)
+pcr_fit <- train(crim ~ indus + nox + age + rad + tax + lstat,
+                 data = train_set, 
+                 method = "pcr", 
+                 trControl = trainControl(method = "cv", number = 10),
+                 tuneGrid = tune_grid,
+                 preProcess = c("center", "scale") # essential to normalize data
+)
+pcr_fit
+```
+
+RMSE = 5.910706, was used to select the optimal model using the smallest value.
+The final value used for the model was ncomp = 4 hence the PCA Dimension should equal 4.
+The PCA with 4 dimensions diminishes the RMSE a bit (5.913542 vs 5.910706). Hence, it
+improves the fit of the simple linear model.
+
+
+### Use penalized linear models for the same task.
+
+```{r}
+set.seed(1234)
+fit_control <- trainControl(method = "cv", number = 10)
+
+# alpha param - differentiate bw lasso(1), ridge(0) and elastic net((0,1)).
+# lambda param - define the penalty param 
+tune_grid <- expand.grid("alpha" = seq(0, 1, 0.1), "lambda" = c(0.1, 0.01, 0.001, 0.0001))
+set.seed(1234)
+gmlnet_fit <- train(crim ~ indus + nox + age + rad + tax + lstat,
+                   data = train_set, 
+                   method = "glmnet", 
+                   preProcess = c("center", "scale"), # essential to normalize data
+                   tuneLength = 10,
+                   tuneGrid = tune_grid,
+                   trControl = fit_control)
+gmlnet_fit
+```
+
+The final values used for the model were alpha = 1(lasso) and lambda = 0.1.
+
+RMSE = 5.873795, pretty close to previous model RMSE results but better than PCA with dim 4 and simple linear model.
+
+
+### Regularized models and PCA
+```{r}
+# add PCA
+set.seed(1234)
+gmlnet_fit2 <- train(crim ~ indus + nox + age + rad + tax + lstat,
+                    data = train_set, 
+                    method = "glmnet", 
+                    preProcess = c("center", "scale", "pca"),
+                    tuneLength = 10,
+                    tuneGrid = tune_grid,
+                    trControl = fit_control)
+gmlnet_fit2
+
+```
+
+The final values used for the model were alpha = 0 and lambda = 0.1
+
+RMSE = 5.868178. Adding a PCA component to the penalized linear model improves the fit even more.
+However, now the best performing model is Ridge (alpha = 0).
+
+
+Evaluate the combined model on the test set.
+
+```{r}
+# The best perfoming model is Rigde with principal component signal extraction (6).
+test_prediction <- predict.train(gmlnet_fit2, newdata = test_set)
+RMSE(test_prediction, test_set[["crim"]])
+```
+**RMSE = 6.262462 - performs worse on test set**
+
+
+
+## PCA for unsupervised learning. 
+
+**Task 2:**
+
+**Perform PCA on 40 observations of 1000 variables. The variables are measurments of genes of tissues of healthy and diseased patients: the first 20 observations are coming from healthy and the others from diseased patients.**
+
+Data comes from the ISLR package.
+
+Load and look at the tail of the data set.
+```{r}
+data <- fread("data\\gene_data.csv")
+data[, is_diseased := factor(is_diseased)]
+dim(data)
+tail(names(data))
+```
+
+Perform PCA on this data with scaling features.
+
+```{r}
+data_features <- copy(data)
+# drop the variable with the labels
+data_features[, is_diseased := NULL]
+dim(data_features)
+pca_result <- prcomp(data_features, scale. = TRUE)
+```
+
+
+Visualize datapoints in the space of the first two principal components
+
+```{r}
+fviz_pca_ind(pca_result, geom = "point")
+```
+
+This plot shows that the first dimension covers 8.1% of the variance in the whole data, while the second components accounts for 3.4%. Usually, the first dimension is expected to explain a much larger share of the variance.
+
+
+Which individual features matter the most in separating diseased from healthy?
+
+```{r}
+# Look for high loadings features
+# create 2 vectors with PCA nb 1 - the original and one with only abs values
+pca_1 = pca_result$rotation[,1]
+pca_1_abs = abs(pca_result$rotation[,1])
+
+# find the index of the two greatest values in abs terms
+index.top.N = function(xs, N=2){
+  if(length(xs) > 0) {
+    o = order(xs, na.last=FALSE)
+    o.length = length(o)
+    if (N > o.length) N = o.length
+    o[((o.length-N+1):o.length)]
+  }
+  else {
+    0
+  }
+}
+
+index.top.N(pca_1_abs,2)
+```
+
+**The indexes of the 2 greatest values in PCA 1 = {545; 450}.**
+
+```{r}
+pca_1[545] # measure_589 has pca 1 = 0.09449766 
+
+pca_1[450] # measure_502 has pca 1 = 0.09485044
+```
+
+
+```{r}
+ggplot(data_features, aes(measure_589, measure_502)) + geom_point(color = "darkgreen") + 
+  geom_smooth(method = "loess") + 
+  ggtitle("Scatter plot of the 2 features with highest loading in PC1") +
+  theme_classic()
+```
+
+There seems to be a positive nonlinear relationship among these 2 features in the lower bands. However, the relationship flattens out in the higher bands.
+
+
+```{r}
+ggplot(data, aes(x = measure_502, y = measure_589, color = is_diseased)) +
+  geom_point() +
+  ggtitle('Healthy and diseased patients defined by the two most important features in PC1') +
+  theme_classic()
+```
+
+**We observe that Dim 1 differentiates very well between the two clusters. Hence, instead of using all 1000 vars, we could use only these two features and achieve satisfactory results.**
+
+
+
+## Clustering
+
+**Task 3:**
+
+**Data sets used is USArrests. Our task is to apply clustering and then make sense of the clusters using the principal components.**
+
+
+Determine the optimal number of clusters
+
+```{r}
+data <- USArrests
+
+nb <- NbClust(data, method = "kmeans", 
+              min.nc = 2, max.nc = 10, index = "all")
+
+fviz_nbclust(nb)
+```
+
+By employing the NbClust, we conclud that the optimal number of clusters is 2.
+
+
+### Create 2-means clustering
+
+```{r}
+km_clustering <- kmeans(data, centers = 2)
+km_clustering 
+```
+
+```{r}
+# create new var that indicated to which cluster does the obs belong to
+data_w_clusters <- cbind(data, data.table("cluster" = factor(km_clustering$cluster)))
+```
+
+Visualize the two clusters
+```{r}
+ggplot(data_w_clusters, 
+       aes(x = Assault, y = UrbanPop , color = cluster)) + geom_point() + theme_classic()
+
+ggplot(data_w_clusters, 
+       aes(x = Murder, y = UrbanPop , color = cluster)) + geom_point() + theme_classic()
+
+ggplot(data_w_clusters, 
+       aes(x = Rape, y = UrbanPop , color = cluster)) + geom_point() + theme_classic()
+
+```
+
+
+
+```{r}
+pca_result <- prcomp(data, scale. = TRUE)
+first_two_pc <- data.table(pca_result$x[, 1:2])
+data_w_pca <- cbind(data_w_clusters, first_two_pc)
+#first_two_pc
+
+fviz_pca(pca_result, scale = 0)
+```
+
+The first dim captures the crime variables, while the second dim captures the urban population.
+
+Alternative visualization
+```{r}
+fviz_pca_ind(pca_result, geom = "point", habillage = data_w_clusters[['cluster']],
+             addEllipses=TRUE , palette = c("green", "red"))
+```
+
+Dim 1 is a good differentiator between the two clusters.
+
+
+```{r}
+ggplot(data_w_pca, aes(x = PC1, y = PC2, color = cluster)) +
+  geom_point() + geom_text(aes(label = rownames(data_w_pca))) +
+  theme_classic() + ggtitle("Cluster breakdown per Principal Component")
+```

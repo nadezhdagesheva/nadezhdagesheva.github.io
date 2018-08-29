@@ -1,0 +1,20 @@
+name: "my-website"
+output_dir: '.'
+navbar:
+  title: "Nadezhda Gesheva"
+  left:
+    - text: "Data Science with R"
+      href: index.html
+    - text: "CV & LOOCV"
+      href: Project_1.html
+    - text: "PCA, Clustering & Regularization"
+      href: Project_2.html
+    - text: "Ensemble Models"
+      href: Project_3.html
+    - text: "DL and stacking"
+      href: Project_4.html
+output:
+  html_document:
+  theme: cosmo
+  lib_dir: site_libs
+  self_contained: no

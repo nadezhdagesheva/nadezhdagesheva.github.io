@@ -1,0 +1,273 @@
+---
+title: "Classification tree & Ensemble models - RF, GBM & XGBoost"
+---
+
+
+Load libraries
+
+```{r, message=FALSE}
+library(data.table)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(xgboost)
+library(randomForest)
+library(gbm)
+library(ISLR)
+library(skimr)
+library(ROCR)
+library(pROC)
+library(gridExtra)
+```
+
+## Classification tree model
+
+**Task 1:**
+
+**The data set is OJ dataset from the ISLR package. This dataset records purchases of two types of orange juices and presents customer and product characteristics as features. The goal is to predict which of the juices is chosen in a given purchase situation.**
+
+Load & Visualize
+```{r}
+# Load the data
+data <- data.table(OJ)
+skim(data)
+```
+
+Data prep
+```{r}
+# Create train(75%) and test(25%) data sets
+train_ratio <- 0.75
+set.seed(987)
+train_indices <- createDataPartition(y = data[["Purchase"]],
+                                     times = 1,
+                                     p = train_ratio,
+                                     list = FALSE)
+train_set <- data[train_indices,]
+test_set <- data[-train_indices,]
+```
+
+
+### Build a simple clasiffication tree
+```{r}
+set.seed(987)
+train_contr <- trainControl(method = "cv",
+                            number = 10,
+                            classProbs = TRUE, # binary outcome
+                            verboseIter = TRUE,
+                            summaryFunction = twoClassSummary,
+                            selectionFunction = "oneSE") # select based on the 1 SE rule
+
+set.seed(987)
+simple_class_tree <- train(Purchase ~., 
+                           data = train_set,
+                           method = "rpart", 
+                           tuneGrid = data.frame(cp = c(0.001, 0.005, 0.01, 0.05, 0.1)),
+                           trControl = train_contr,
+                           metric = "ROC"
+                           )
+
+simple_class_tree
+
+# Use the "one-standard error rule" to select the final model
+
+# cp     ROC        Sens       Spec     
+# 0.001  0.8684219  0.8244898  0.6995968
+# 0.005  0.8639205  0.8489796  0.7256048
+# 0.010  0.8543717  0.8693878  0.7030242  BEST MODEL ACCORDING TO ONE SE RULE
+# 0.050  0.7948198  0.8102041  0.7794355
+# 0.100  0.7948198  0.8102041  0.7794355
+```
+
+
+Visualize
+```{r}
+# Plot
+rpart.plot(simple_class_tree[["finalModel"]])
+```
+
+Thse types of tree visualizations are very helpful and easy to use since if I have a new observation, I would simply follow the simple_class_tree graph and make a prediction based on the output of the graph.
+
+
+Evaluate the selected model on the test set.
+```{r}
+sel_tree_Roc <- roc(predictor = predict(simple_class_tree, test_set, type='prob', 
+                                            decision.values=T)$CH, response = test_set$Purchase)
+sel_tree_Roc
+```
+
+**Area under the curve: 0.8418 compared to 0.8543717 in train set!**
+
+
+
+## Ensemble models
+
+**Task 2:**
+
+**Continue using the OJ dataset from the ISLR package. The goal now is to boost performance by implementing an ensemble model whose inputs would be the predictions from:**
+
+ **- random forest**
+ 
+ **- gradient boosting machine**
+ 
+ **- XGBoost**
+
+
+### Random Forest
+```{r, verbose = FALSE, trace = FALSE}
+set.seed(987)
+train_contr <- trainControl(method = "cv",
+                            number = 10,
+                            classProbs = TRUE,
+                            verboseIter = TRUE,
+                            summaryFunction = twoClassSummary)
+
+set.seed(987)
+rf_model <- train(Purchase ~.,
+                  data = train_set,
+                  method = "rf",
+                  trControl = train_contr,
+                  tuneGrid = data.frame(mtry = c(2, 5, 7, 10, 13, 15, 17)),
+                  importance = TRUE,
+                  metric = "ROC")
+rf_model
+# Best model performance on train set
+# mtry  ROC        Sens       Spec
+# 5    0.8730888  0.8346939  0.7257056
+```
+
+
+
+### Gradient Boosting Machine
+```{r, verbose = FALSE, message=FALSE, warning=FALSE, trace = FALSE}
+set.seed(987)
+gbm_grid <- expand.grid( n.trees = c(500, 1000),
+                         interaction.depth = c(1, 3, 5),
+                         shrinkage = c(0.001, 0.01, 0.1),
+                         n.minobsinnode = c(5, 10) )
+set.seed(987)
+gbm_model <- train(Purchase~.,
+                   data = train_set,
+                   method = "gbm",
+                   trControl = train_contr,
+                   tuneGrid = gbm_grid,
+                   verbose = FALSE, 
+                   metric = "ROC")
+```
+
+```{r}
+gbm_model
+```
+
+The final values used for the model were n.trees = 500, interaction.depth = 3, shrinkage = 0.01 and n.minobsinnode = 5.
+
+
+# XGBoost
+```{r, verbose = FALSE, message=FALSE, warning=FALSE, trace = FALSE}
+set.seed(987)
+xgbGrig <- expand.grid( nrounds = c(500, 1000),
+                        max_depth = c(1, 3, 5),
+                        eta = c(0.001, 0.01, 0.1),
+                        gamma = 0,
+                        colsample_bytree = c(0.5),
+                        min_child_weight = 1,
+                        subsample = 0.6 )
+set.seed(987)
+xgboost_model <- train(Purchase~.,
+                       data = train_set,
+                       method = "xgbTree",
+                       trControl = train_contr,
+                       tuneGrid = xgbGrig,
+                       verbose = FALSE,
+                       metric = "ROC")
+```
+
+```{r}
+xgboost_model
+```
+
+Resampling and preformance measure
+```{r}
+set.seed(987)
+resamples_object <- resamples(list("rpart" = simple_class_tree,
+                                   "rf" = rf_model,
+                                   "gbm" = gbm_model,
+                                   "xgboost" = xgboost_model
+                                   ))
+summary(resamples_object)
+
+# ROC 
+#             Min.   1st Qu.    Median      Mean   3rd Qu.      Max.   NA's
+## rpart   0.7883476 0.8229998 0.8583978 0.8543717 0.8722844 0.9535879    0
+## rf      0.8117182 0.8363361 0.8914839 0.8730888 0.9087393 0.9213298    0
+## gbm     0.8222515 0.8784202 0.9041516 0.8976526 0.9229756 0.9664253    0
+## xgboost 0.8403555 0.8724490 0.9042133 0.8981166 0.9193548 0.9522712    0 WINNER
+
+
+```
+
+**The xgboost model is the most predictive one on the train set with mean ROC of 0.8981.**
+
+
+Visualize the xgboost model on the test set
+```{r}
+set.seed(987)
+test_pred_xgboost_probs <- predict.train(xgboost_model, newdata = test_set, type = "prob")
+
+# Model pred on test set
+xgboost_prediction <- prediction(test_pred_xgboost_probs$MM, test_set[["Purchase"]])
+# Create the true positive rate and false positive rate
+xgboost_perf <- performance(xgboost_prediction, measure = "tpr", x.measure = "fpr")
+
+# Continue the analysis with test set predictions vs the true values of the test set
+xgboost_roc_df <- data.table(
+  model = "xgboost",
+  FPR = xgboost_perf@x.values[[1]],
+  TPR = xgboost_perf@y.values[[1]],
+  cutoff = xgboost_perf@alpha.values[[1]] )
+
+# plot the ROC
+ggplot(xgboost_roc_df) +
+  geom_line(aes(FPR, TPR, color = model), size = 2) +
+  geom_abline(intercept = 0, slope = 1,  linetype = "dotted", col = "black") +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, .1)) +
+  scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, .1)) +
+  xlab("False Positive Rate") + ylab("True Positive Rate") 
+
+
+# AUC measure
+xgboost_model_Roc <- roc(predictor = predict(xgboost_model, test_set, type='prob', 
+                                            decision.values=T)$MM, response = test_set$Purchase)
+xgboost_model_Roc
+```
+
+AUC on test set is 0.8966, which is only slightly less that the AUC on the train set - 0.8984509.
+
+```{r}
+# Variable importance for all the 3 models
+plot_1 <- plot(varImp(rf_model))
+plot(varImp(rf_model), main = "Variables in order of predictive power - RF model")
+```
+
+LoyalCH is the most important variables outpacing all remaining vars (StoreID and PriceDiff follow).
+
+```{r}
+plot_2 <- plot(varImp(gbm_model)) 
+plot(varImp(gbm_model), main = "Variables in order of predictive power - GBM model")
+```
+
+LoyalCH is the most important variables outpacing all remaining vars (PriceDiff and StoreID follow).
+
+```{r}
+plot_3 <- plot(varImp(xgboost_model))
+plot(varImp(xgboost_model), main = "Variables in order of predictive power - XGBoost model")
+```
+
+LoyalCH is the most important variables outpacing all remaining vars (StoreID and PriceDiff follow).
+
+```{r}
+grid.arrange(plot_1, plot_2, plot_3, ncol=3)
+```
+
+
+*We see that the variable importance among all the ensemble models is very similar.*
+
